@@ -1,3 +1,8 @@
+# ============================================
+# modules/security/main.tf - CORRECTED
+# ONLY define security group here
+# ============================================
+
 resource "aws_security_group" "main" {
   name        = "${var.project_name}-sg"
   description = "Security group for Phoenix cluster"
@@ -30,13 +35,22 @@ resource "aws_security_group" "main" {
     description = "HTTPS"
   }
 
-  # Allow all traffic between instances in the same security group (for k3s)
+  # Kubernetes API - INTERNAL ONLY (Security requirement!)
+  ingress {
+    from_port   = 6443
+    to_port     = 6443
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.0.0/16"]  # Only internal network
+    description = "Kubernetes API - internal only"
+  }
+
+  # Node-to-node communication - INTERNAL ONLY
   ingress {
     from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    self        = true
-    description = "Allow all internal traffic"
+    to_port     = 65535
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.0.0/16"]  # Only internal network
+    description = "Node-to-node communication"
   }
 
   # Allow all outbound traffic
@@ -53,7 +67,7 @@ resource "aws_security_group" "main" {
   }
 }
 
-# Output
+# ===== OUTPUT =====
 output "security_group_id" {
   value = aws_security_group.main.id
 }

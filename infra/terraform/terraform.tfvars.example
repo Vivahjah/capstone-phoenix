@@ -1,3 +1,10 @@
+# ============================================
+# terraform.tfvars.example
+# Copy to terraform.tfvars and fill in
+# ============================================
+
 aws_region       = "us-east-1"
-ssh_allowed_ip   = "102.89.76.200/32"   # e.g., 102.89.23.45/32
-key_name         = "capstone-phoenix-key"  # Ensure this key exists in AWS
+instance_type    = "t3.medium"
+ssh_allowed_ip   = "YOUR_IP_HERE/32"  # Get from: curl ifconfig.me
+key_name         = "capstone-phoenix-key"
+project_name     = "capstone-phoenix"

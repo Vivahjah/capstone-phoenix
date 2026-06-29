@@ -1,23 +1,28 @@
+# ============================================
+# modules/compute/variables.tf
+# ============================================
+
 variable "project_name" {
-  type = string
+  description = "Project name for tagging"
+  type        = string
 }
 
 variable "instance_type" {
-  type = string
+  description = "EC2 instance type"
+  type        = string
 }
 
 variable "key_name" {
-  type = string
-}
-
-variable "vpc_id" {
-  type = string
+  description = "Name of AWS key pair"
+  type        = string
 }
 
 variable "public_subnet_ids" {
-  type = list(string)
+  description = "List of public subnet IDs"
+  type        = list(string)
 }
 
 variable "security_group_id" {
-  type = string
+  description = "Security group ID"
+  type        = string
 }
