@@ -1,0 +1,4 @@
+# NOTE: this must match the subnet CIDR in infra/terraform/modules/network/main.tf
+# (aws_subnet.main.cidr_block). If you ever resize the subnet in Terraform,
+# update this value too — nothing links them automatically.
+cluster_subnet_cidr: "10.0.1.0/24"

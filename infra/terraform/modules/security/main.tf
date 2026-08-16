@@ -1,73 +1,70 @@
-# ============================================
-# modules/security/main.tf - CORRECTED
-# ONLY define security group here
-# ============================================
-
-resource "aws_security_group" "main" {
+resource "aws_security_group" "cluster" {
   name        = "${var.project_name}-sg"
-  description = "Security group for Phoenix cluster"
+  description = "Security group for k3s cluster"
   vpc_id      = var.vpc_id
-
-  # SSH - only from your IP
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.ssh_allowed_ip]
-    description = "SSH from allowed IP"
-  }
-
-  # HTTP
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "HTTP"
-  }
-
-  # HTTPS
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "HTTPS"
-  }
-
-  # Kubernetes API - INTERNAL ONLY (Security requirement!)
-  ingress {
-    from_port   = 6443
-    to_port     = 6443
-    protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]  # Only internal network
-    description = "Kubernetes API - internal only"
-  }
-
-  # Node-to-node communication - INTERNAL ONLY
-  ingress {
-    from_port   = 0
-    to_port     = 65535
-    protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]  # Only internal network
-    description = "Node-to-node communication"
-  }
-
-  # Allow all outbound traffic
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 
   tags = {
     Name    = "${var.project_name}-sg"
-    Project = var.project_name
+    project = var.project_name
   }
 }
 
-# ===== OUTPUT =====
-output "security_group_id" {
-  value = aws_security_group.main.id
+resource "aws_security_group_rule" "ssh" {
+  type              = "ingress"
+  from_port         = 22
+  to_port           = 22
+  protocol          = "tcp"
+  cidr_blocks       = [var.my_ip]
+  security_group_id = aws_security_group.cluster.id
+  description       = "SSH from admin IP only"
+}
+
+resource "aws_security_group_rule" "http" {
+  type              = "ingress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.cluster.id
+  description       = "HTTP traffic into the cluster"
+}
+
+resource "aws_security_group_rule" "https" {
+  type              = "ingress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.cluster.id
+  description       = "HTTPS traffic into the cluster"
+}
+
+resource "aws_security_group_rule" "k3s_api" {
+  type              = "ingress"
+  from_port         = 6443
+  to_port           = 6443
+  protocol          = "tcp"
+  cidr_blocks       = [var.my_ip]
+  security_group_id = aws_security_group.cluster.id
+  description       = "k3s API server (kubectl access) - admin IP only, never 0.0.0.0/0"
+}
+
+resource "aws_security_group_rule" "internal" {
+  type              = "ingress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  self              = true
+  security_group_id = aws_security_group.cluster.id
+  description       = "Allow all traffic between cluster nodes (kubelet, VXLAN/Calico, etcd, etc.)"
+}
+
+resource "aws_security_group_rule" "egress_all" {
+  type              = "egress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.cluster.id
+  description       = "Allow all outbound traffic - required for apt, get.k3s.io, ghcr.io pulls, etc."
 }

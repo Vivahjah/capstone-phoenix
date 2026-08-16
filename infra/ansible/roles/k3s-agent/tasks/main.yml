@@ -1,0 +1,32 @@
+---
+- name: Get the k3s join token from control plane
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: k3s_token
+  delegate_to: control_plane
+  run_once: true
+
+- name: Install k3s on worker nodes and join cluster (backgrounded — the install
+    script's own internal readiness check can't pass until Calico is installed,
+    so it always times out here even on a successful join)
+  ansible.builtin.shell: |
+    curl -sfL https://get.k3s.io | \
+    K3S_URL="https://{{ hostvars['control_plane']['private_ip'] }}:6443" \
+    K3S_TOKEN="{{ k3s_token['content'] | b64decode | trim }}" \
+    sh -
+  args:
+    creates: /usr/local/bin/k3s-agent-uninstall.sh
+  async: 900
+  poll: 0
+  register: k3s_agent_install
+
+- name: Wait for this node to register with the cluster (the real success
+    signal — checked from the control plane, independent of the install
+    script's own exit code)
+  ansible.builtin.shell: "k3s kubectl get nodes -o wide | grep {{ private_ip }}"
+  delegate_to: control_plane
+  register: node_check
+  until: node_check.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false

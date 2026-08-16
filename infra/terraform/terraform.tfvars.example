@@ -1,10 +1,18 @@
-# ============================================
-# terraform.tfvars.example
-# Copy to terraform.tfvars and fill in
-# ============================================
+# Copy this file to terraform.tfvars and fill in real values.
+# terraform.tfvars is gitignored — never commit it (contains your real IP).
 
-aws_region       = "us-east-1"
-instance_type    = "t3.medium"
-ssh_allowed_ip   = "YOUR_IP_HERE/32"  # Get from: curl ifconfig.me
-key_name         = "capstone-phoenix-key"
-project_name     = "capstone-phoenix"
+region       = "us-east-1"
+project_name = "capstone-phoenix"
+
+# Your current public IP in CIDR form — changes often on mobile hotspot/dynamic
+# connections. Check with: curl ifconfig.me
+# Update this before every apply if it's changed since your last session.
+my_ip = "0.0.0.0/32"
+
+# Path to the local SSH public key. Terraform creates the AWS key pair from
+# this file — generate one first if you don't have it:
+#   ssh-keygen -t ed25519 -f ~/.ssh/capstone-phoenix-key
+ssh_public_key_path = "~/.ssh/capstone-phoenix-key.pub"
+
+server_instance_type = "t3.small"
+worker_instance_type = "t3.small"

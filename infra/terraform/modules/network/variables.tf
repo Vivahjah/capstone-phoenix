@@ -1,7 +1,4 @@
 variable "project_name" {
-  type = string
-}
-
-variable "aws_region" {
-  type = string
+  description = "Prefix used for naming all network resources"
+  type        = string
 }
