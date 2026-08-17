@@ -40,6 +40,16 @@ spec:
             limits:
               cpu: "250m"
               memory: "128Mi"
+          # Gives the Service/Ingress layer time to stop routing traffic to this
+          # pod BEFORE the container actually receives SIGTERM — closes a real,
+          # observed gap where maxUnavailable:0 alone still allowed a handful of
+          # 502/connection-refused responses during a rolling update (endpoint
+          # propagation lag between kube-proxy/Traefik and the actual pod
+          # shutdown).
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
           livenessProbe:
             httpGet:
               path: /

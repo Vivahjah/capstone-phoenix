@@ -1,0 +1,50 @@
+=== PVC persistence test — Postgres pod deleted, PVC re-attached, data intact ===
+Date: 2026-08-17
+
+=== BEFORE: existing tasks ===
+$ kubectl exec -it postgres-0 -n taskapp -- psql -U taskapp_admin -d taskapp -c "SELECT id, title FROM tasks;"
+
+ id |           title            
+----+----------------------------
+  1 | Wash Cloth
+  2 | checking argo
+  3 | Testing Ingress and Egress
+  4 | hello
+(4 rows)
+
+=== Deleting pod ===
+$ kubectl delete pod postgres-0 -n taskapp
+pod "postgres-0" deleted from taskapp namespace
+
+=== Watching recovery ===
+$ kubectl get pods -n taskapp -l app=postgres -w
+NAME         READY   STATUS              RESTARTS   AGE
+postgres-0   0/1     ContainerCreating   0          1s
+postgres-0   0/1     ContainerCreating   0          1s
+postgres-0   0/1     Running             0          1s
+postgres-0   0/1     Running             0          6s
+postgres-0   1/1     Running             0          6s
+
+=== AFTER: same tasks still present ===
+$ kubectl exec -it postgres-0 -n taskapp -- psql -U taskapp_admin -d taskapp -c "SELECT id, title FROM tasks;"
+
+ id |           title            
+----+----------------------------
+  1 | Wash Cloth
+  2 | checking argo
+  3 | Testing Ingress and Egress
+  4 | hello
+(4 rows)
+
+=== RESULT ===
+Pod recreated in ~6 seconds, PVC re-attached automatically (StatefulSet +
+volumeClaimTemplates), all 4 pre-existing rows present and unchanged after
+recovery. No data loss.
+
+CAVEAT (see ARCHITECTURE.md / RUNBOOK.md for full detail): this cluster's
+default StorageClass is k3s's bundled `local-path`, which ties the PV to
+the specific node it was first provisioned on rather than being a true
+network-attached volume. This test proves recovery from a pod-level
+deletion on the same node — it does not prove recovery from loss of that
+node itself, which would require a network-attached StorageClass (e.g. the
+AWS EBS CSI driver) to guarantee.
