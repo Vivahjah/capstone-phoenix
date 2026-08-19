@@ -168,3 +168,44 @@ path," completely independent of `.gitignore`, build tooling, or intent.
 Anything with the same `kind`+`name`+`namespace` as a real, sensitive
 resource is a live collision risk the moment it's committed anywhere inside
 the synced path — regardless of whether it's "just an example."
+
+## Documented incident — rolling updates weren't actually zero-downtime
+
+**What happened:** while capturing evidence for `EVIDENCE/zero-downtime.log`,
+a continuous request loop (1/sec, 3s timeout) against the live app during a
+`kubectl rollout restart deployment/frontend` showed real failures —
+`502`s and connection-refused (`000`) responses clustered in two tight
+bursts, each landing right where you'd expect the two sequential pod
+terminations of a 2-replica rollout to happen. `maxUnavailable: 0` /
+`maxSurge: 1` alone did not guarantee the zero-downtime behavior it was
+assumed to provide.
+
+**Root cause:** a real, well-documented Kubernetes gap between two layers
+that don't update in perfect lockstep — the Deployment controller's own
+bookkeeping (which `maxUnavailable`/`maxSurge` govern) versus the Service's
+list of valid endpoints (propagated via kube-proxy, consumed by Traefik).
+When a pod receives `SIGTERM`, it can stop accepting connections almost
+immediately, but the Service/Ingress layer takes a brief moment to notice
+and stop routing to it — traffic can land on an already-dying pod in that
+window.
+
+**Fix:** added a `lifecycle.preStop` hook (`sleep 5`) to both the backend
+and frontend Deployments. This delays actual container shutdown after
+`SIGTERM` long enough for the Service/Ingress layer to catch up and stop
+routing to the pod first — a manifest-level fix, not an application source
+change. Re-ran the identical test after the fix: 90/90 requests returned
+`200`, zero failures, across the same rollout window that previously
+showed real errors.
+
+**How it was found:** not caught by inspecting the manifest — only surfaced
+by actually running a live rollout under continuous load while capturing
+evidence, rather than assuming `maxUnavailable: 0` was sufficient on its
+own. The operator independently noticed the failures consistently
+coincided with running the rollout command, before being told the
+diagnosis — confirming the pattern was real, not incidental network noise.
+
+**Lesson:** the manifest settings that *look* like they guarantee
+zero-downtime (`maxUnavailable: 0`) address only one layer of the problem.
+Actually proving zero-downtime requires testing under real, concurrent
+load during a real rollout — not just reasoning about what the settings
+should theoretically do.

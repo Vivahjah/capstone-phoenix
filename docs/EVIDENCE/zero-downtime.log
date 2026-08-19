@@ -1,0 +1,53 @@
+=== Zero-downtime rolling update test ===
+Date: 2026-08-17
+Method: continuous requests (1/sec, 3s timeout) against
+https://taskapp.cognistack.dpdns.org/ while triggering
+`kubectl rollout restart deployment/frontend -n taskapp` mid-run.
+
+------------------------------------------------------------
+ATTEMPT 1 (no timeout set on curl) — inconclusive
+------------------------------------------------------------
+A 32-second silent gap appeared with one eventual 504. No timeout on the
+curl call meant a hung request just didn't print anything rather than
+failing visibly — not useful evidence either way. Re-ran with --max-time 3
+to get bounded, visible failures instead of silent gaps.
+
+------------------------------------------------------------
+ATTEMPT 2 (--max-time 3, before preStop hook) — REAL GAP FOUND
+------------------------------------------------------------
+02:36:21 - 200
+02:36:23 - 502   <- Traefik couldn't reach the pod being terminated
+02:36:27 - 000   <- connection refused entirely
+02:36:29 - 200   <- recovered
+   ...
+02:38:07 - 200
+02:38:11 - 000   <- second gap, second pod's termination (2 replicas → 2 swaps)
+02:38:13 - 200   <- recovered
+
+RESULT: maxUnavailable:0/maxSurge:1 alone did NOT guarantee zero-downtime.
+Root cause: a real, well-documented Kubernetes gap — Service/Ingress
+endpoint propagation (kube-proxy/Traefik noticing a pod is gone) lags
+slightly behind the pod actually receiving SIGTERM and stopping accepting
+connections. Traffic can land on a pod mid-shutdown in that window.
+
+FIX APPLIED: added a `lifecycle.preStop` hook (`sleep 5`) to both
+backend and frontend Deployments — delays actual container shutdown after
+SIGTERM long enough for the Service/Ingress layer to stop routing to it
+first. This is a manifest-level fix, not an application source change.
+
+------------------------------------------------------------
+ATTEMPT 3 (--max-time 3, after preStop hook) — CLEAN
+------------------------------------------------------------
+90/90 requests returned 200. Zero failures, zero gaps, across the full
+90-second window including the rollout trigger. Full raw log:
+(see zero-downtime-raw-3.log in this same directory for the complete,
+unedited 90-line output)
+
+------------------------------------------------------------
+NOTE ON HOW THIS WAS FOUND
+------------------------------------------------------------
+The operator independently noticed the 502s consistently coincided with
+running the rollout command in a second terminal, before being told the
+diagnosis — an observation that matched the timestamp analysis exactly
+and confirmed the failures were a real, reproducible rollout-timing issue
+rather than incidental network noise.
